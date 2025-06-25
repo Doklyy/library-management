@@ -2,6 +2,7 @@ package com.library.controller;
 
 import com.library.common.ApiResponse;
 import com.library.common.ResponseCode;
+import com.library.dto.PageResponse;
 import com.library.dto.UserDTO;
 import com.library.service.UserService;
 import com.library.dto.LoginRequest;
@@ -13,21 +14,34 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 import java.util.Collections;
+import java.util.List;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/api/users")
 @RequiredArgsConstructor
 public class UserController {
-    
     private final UserService userService;
 
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserDTO>> getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        UserDTO user = userService.getUserByUsername(username);
+        return ResponseEntity.ok(ApiResponse.success(user));
+    }
+
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<UserDTO>>> getUsers(
+    public ResponseEntity<PageResponse<UserDTO>> getAllUsers(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean isActive,
+            @RequestParam(required = false) String role,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<UserDTO> users = userService.findUserFilter(new LoginRequest(), pageable);
-        return ResponseEntity.ok(ApiResponse.success(users));
+        return ResponseEntity.ok(userService.searchUsers(keyword, isActive, role, pageable));
     }
 
     @GetMapping("/{id}")
@@ -37,20 +51,33 @@ public class UserController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<UserDTO>> createUser(@RequestBody CreateUserRequest request) {
+    public ResponseEntity<ApiResponse<UserDTO>> createUser(@RequestBody @Valid CreateUserRequest request) {
         UserDTO user = userService.createUser(request);
         return ResponseEntity.ok(ApiResponse.created(user));
     }
 
-    @PutMapping
-    public ResponseEntity<ApiResponse<UserDTO>> updateUser(@RequestBody UpdateUserRequest request) {
-        UserDTO user = userService.updateUser(request);
-        return ResponseEntity.ok(ApiResponse.success(user));
+    @PutMapping("/{id}")
+    public ResponseEntity<UserDTO> updateUser(@PathVariable Long id, @Valid @RequestBody UpdateUserRequest request) {
+        return ResponseEntity.ok(userService.updateUser(id, request));
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Long id) {
-        userService.deleteUserById(Collections.singletonList(id));
+    @DeleteMapping
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@RequestBody List<Long> ids) {
+        userService.deleteUserById(ids);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @GetMapping("/check-role/{username}")
+    public ResponseEntity<ApiResponse<String>> checkUserRole(@PathVariable String username) {
+        UserDTO user = userService.getUserByUsername(username);
+        if (user == null) {
+            return ResponseEntity.ok(ApiResponse.error(ResponseCode.NOT_FOUND, "User not found"));
+        }
+        return ResponseEntity.ok(ApiResponse.success("User role: " + user.getRole()));
+    }
+
+    @GetMapping("/check")
+    public ResponseEntity<String> checkAuth(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        return ResponseEntity.ok("Authenticated successfully. Auth header: " + authHeader);
     }
 }

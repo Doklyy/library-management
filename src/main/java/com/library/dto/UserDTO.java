@@ -1,10 +1,9 @@
 package com.library.dto;
 
-import com.library.entity.UserRole;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -19,11 +18,11 @@ public class UserDTO {
     String email;
     String phone;
     String address;
-    Timestamp dob;
+    LocalDateTime dob;
     String identityNumber;
-    Timestamp createdAt;
-    Timestamp updatedAt;
-    Boolean active;
+    LocalDateTime createdAt;
+    LocalDateTime updatedAt;
+    Boolean isActive;
     Boolean isDeleted;
-    UserRole role;
+    String role;
 } 

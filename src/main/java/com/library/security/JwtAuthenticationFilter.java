@@ -1,76 +1,97 @@
 package com.library.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.library.common.ApiResponse;
+import com.library.common.ResponseCode;
 import com.library.dto.LoginRequest;
 import com.library.dto.LoginResponse;
 import com.library.dto.UserDTO;
-import com.library.service.UserService;
+import com.library.dto.ErrorResponse;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import java.io.IOException;
 
+import java.io.IOException;
+import java.util.ArrayList;
+
+@Slf4j
 public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
     private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider tokenProvider;
+    private final JwtService jwtService;
+    private final UserDetailsService userDetailsService;
     private final ObjectMapper objectMapper;
-    private final UserService userService;
 
-    public JwtAuthenticationFilter(AuthenticationManager authenticationManager, JwtTokenProvider tokenProvider, UserService userService) {
+    public JwtAuthenticationFilter(
+            AuthenticationManager authenticationManager,
+            JwtService jwtService,
+            UserDetailsService userDetailsService,
+            ObjectMapper objectMapper) {
         this.authenticationManager = authenticationManager;
-        this.tokenProvider = tokenProvider;
-        this.objectMapper = new ObjectMapper();
-        this.userService = userService;
+        this.jwtService = jwtService;
+        this.userDetailsService = userDetailsService;
+        this.objectMapper = objectMapper;
         setFilterProcessesUrl("/api/auth/login");
     }
 
     @Override
-    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
-            throws AuthenticationException {
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException {
+        log.info("=== Starting authentication attempt ===");
+        log.info("Request Method: {}", request.getMethod());
+        
         try {
-            LoginRequest loginRequest = objectMapper.readValue(request.getInputStream(), LoginRequest.class);
+            String requestBody = request.getReader().lines().reduce("", (accumulator, actual) -> accumulator + actual);
+            log.info("Request body: {}", requestBody);
             
-            UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                    loginRequest.getUsername(),
-                    loginRequest.getPassword());
+            LoginRequest loginRequest = objectMapper.readValue(requestBody, LoginRequest.class);
+            log.info("Parsed login request - Username: {}, Email: {}", loginRequest.getUsername(), loginRequest.getEmail());
 
-            return authenticationManager.authenticate(authenticationToken);
+            String username = loginRequest.getUsername();
+            if (username == null && loginRequest.getEmail() != null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getEmail());
+                username = userDetails.getUsername();
+            }
+
+            if (username == null) {
+                throw new IllegalArgumentException("Username or email is required");
+            }
+
+            log.info("Attempting authentication with username: {}", username);
+            return authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(username, loginRequest.getPassword(), new ArrayList<>())
+            );
         } catch (IOException e) {
-            throw new RuntimeException("Failed to parse login request", e);
+            log.error("Error parsing login request", e);
+            throw new IllegalArgumentException("Invalid request body");
         }
     }
 
     @Override
     protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response,
-            FilterChain filterChain, Authentication authentication) throws IOException, ServletException {
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        String token = tokenProvider.generateToken(authentication);
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
-        
-        response.addHeader("Authorization", "Bearer " + token);
-
-        UserDTO user = userService.getUserByEmail(authentication.getName());
-        LoginResponse loginResponse = new LoginResponse("Login successful", user);
-        response.getWriter().write(objectMapper.writeValueAsString(loginResponse));
+            FilterChain chain, Authentication authResult) throws IOException {
+        UserDetails userDetails = (UserDetails) authResult.getPrincipal();
+        String token = jwtService.generateToken(userDetails);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write(objectMapper.writeValueAsString(
+            new LoginResponse("SUCCESS", "Authentication successful", token)));
     }
 
     @Override
     protected void unsuccessfulAuthentication(HttpServletRequest request, HttpServletResponse response,
-            AuthenticationException failed) throws IOException, ServletException {
+            AuthenticationException failed) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
-        
-        LoginResponse loginResponse = new LoginResponse("Login failed: " + failed.getMessage(), null);
-        response.getWriter().write(objectMapper.writeValueAsString(loginResponse));
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write(objectMapper.writeValueAsString(
+            new ErrorResponse("UNAUTHORIZED", "Authentication failed: " + failed.getMessage())));
     }
-} 
+}

@@ -1,59 +1,138 @@
 package com.library.entity;
-import com.library.utlis.TimeUtlis;
-import com.mysql.cj.util.TimeUtil;
-import jakarta.persistence.*;
+
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.sql.Timestamp;
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Collections;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
-@Entity
 @Data
-@Table(name = "users")
-@AllArgsConstructor
+@Entity
+@Builder
 @NoArgsConstructor
-public class User {
+@AllArgsConstructor
+@Table(name = "users")
+@EntityListeners(AuditingEntityListener.class)
+public class User implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private  Long id;
+    private Long id;
+    
     @Column(nullable = false, unique = true)
-    private  String username;
+    private String username;
+    
     @Column(nullable = false)
     private String password;
+    
     @Column(nullable = false, unique = true)
     private String email;
+    
     @Column(name = "full_name")
     private String fullName;
+    
     private String phone;
-    @Column(nullable = false)
-    private boolean active = true;
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private UserRole role;
-    @Column
-    private String fullname;
-    @Column
+    
     private String address;
-    @Column
-    private Timestamp dob;
-    @Column(updatable = false)
+    
+    @Column(name = "identity_card")
+    private String identityCard;
     private String identityNumber;
-    @Column(updatable = false)
-    private Timestamp createdAt;
-    @Column
-    private Timestamp updatedAt;
-    @Column
-    private Boolean isDeleted;
+    private LocalDateTime dob;
+    
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role_id", nullable = false)
+    private Role role;
+    
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
+    
+    @Builder.Default
+    @Column(name = "is_deleted")
+    private boolean isDeleted = false;
+    
+    @CreatedDate
+    @Column(name = "created_at", nullable = true, updatable = false)
+    private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    private String createdBy;
+    private String updatedBy;
+    
+    @Column(name = "avatar")
+    private String avatar;
+    
+    @Column(name = "borrow_limit")
+    private Integer borrowLimit;
+
+    @Column(name = "last_login_date")
+    private LocalDateTime lastLoginDate;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<BorrowReceipt> borrowReceipts;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<Comment> comments;
+
     @PrePersist
     protected void onCreate() {
-        this.isDeleted = false;
-        this.createdAt = TimeUtlis.getCurrentTimestamp();
-        this.updatedAt = null;
+        LocalDateTime now = LocalDateTime.now();
+        createdAt = now;
+        updatedAt = now;
+        isActive = true;
     }
+
     @PreUpdate
-    protected void upDate(){
-        this.updatedAt= TimeUtlis.getCurrentTimestamp();
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    @Override
+    public String getPassword() {
+        return password;
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role.getRoleName()));
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return isActive && !isDeleted;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return isActive && !isDeleted;
     }
 }

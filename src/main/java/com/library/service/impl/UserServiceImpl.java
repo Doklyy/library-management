@@ -1,53 +1,68 @@
 package com.library.service.impl;
 
+import com.library.dto.PageResponse;
 import com.library.dto.UserDTO;
 import com.library.dto.CreateUserRequest;
 import com.library.dto.UpdateUserRequest;
 import com.library.dto.LoginRequest;
+import com.library.dto.RegisterRequest;
 import com.library.entity.User;
 import com.library.entity.UserRole;
+import com.library.entity.Role;
 import com.library.repository.UserRepository;
+import com.library.repository.RoleRepository;
 import com.library.service.UserService;
+import com.library.exception.BusinessException;
+import com.library.common.ResponseCode;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
-public class UserServiceImpl implements UserService, UserDetailsService {
+public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ModelMapper modelMapper;
+    private final RoleRepository roleRepository;
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+    public User register(RegisterRequest request) {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new BusinessException(ResponseCode.CONFLICT,
+                    String.format("Tên đăng nhập '%s' đã tồn tại", request.getUsername()));
+        }
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException(ResponseCode.CONFLICT,
+                    String.format("Email '%s' đã tồn tại", request.getEmail()));
+        }
 
-        return new org.springframework.security.core.userdetails.User(
-            user.getUsername(),
-            user.getPassword(),
-            user.isActive(),
-            true,
-            true,
-            true,
-            Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
-        );
+        User user = modelMapper.map(request, User.class);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        Role role = roleRepository.findByRoleName("USER")
+            .orElseThrow(() -> new BusinessException(ResponseCode.NOT_FOUND, "Role không tồn tại: USER"));
+        user.setRole(role);
+        user.setActive(true);
+
+        return userRepository.save(user);
     }
 
     @Override
     public UserDTO findDetailUserById(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ResponseCode.NOT_FOUND,
+                        String.format("Không tìm thấy người dùng với ID: %d", id)));
         return convertToDTO(user);
     }
 
@@ -61,32 +76,37 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     @Transactional
     public UserDTO createUser(CreateUserRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Username already exists");
+            throw new BusinessException(ResponseCode.CONFLICT,
+                    String.format("Tên đăng nhập '%s' đã tồn tại", request.getUsername()));
         }
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new BusinessException(ResponseCode.CONFLICT,
+                    String.format("Email '%s' đã tồn tại", request.getEmail()));
         }
 
-        User user = new User();
-        user.setUsername(request.getUsername());
+        User user = modelMapper.map(request, User.class);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setEmail(request.getEmail());
-        user.setFullName(request.getFullName());
-        user.setPhone(request.getPhone());
-        user.setRole(UserRole.USER);
+        String roleName = request.getRole() != null ? request.getRole().toUpperCase() : "USER";
+        Role role = roleRepository.findByRoleName(roleName)
+            .orElseThrow(() -> new BusinessException(ResponseCode.NOT_FOUND, "Role không tồn tại: " + roleName));
+        user.setRole(role);
         user.setActive(true);
-        return convertToDTO(userRepository.save(user));
+
+        User savedUser = userRepository.save(user);
+        return convertToDTO(savedUser);
     }
 
     @Override
     @Transactional
-    public UserDTO updateUser(UpdateUserRequest request) {
-        User user = userRepository.findById(request.getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    public UserDTO updateUser(Long id, UpdateUserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResponseCode.NOT_FOUND,
+                        String.format("Không tìm thấy người dùng với ID: %d", id)));
 
-        if (!user.getEmail().equals(request.getEmail()) && 
-            userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+        if (!user.getEmail().equals(request.getEmail()) &&
+                userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException(ResponseCode.CONFLICT,
+                    String.format("Email '%s' đã tồn tại", request.getEmail()));
         }
 
         user.setEmail(request.getEmail());
@@ -102,10 +122,37 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     @Override
+    public UserDTO getUserByUsername(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ResponseCode.NOT_FOUND,
+                        String.format("Không tìm thấy người dùng với tên đăng nhập: %s", username)));
+        return convertToDTO(user);
+    }
+
+    @Override
     public UserDTO getUserByEmail(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ResponseCode.NOT_FOUND,
+                        String.format("Không tìm thấy người dùng với email: %s", email)));
         return convertToDTO(user);
+    }
+
+    @Override
+    public PageResponse<UserDTO> searchUsers(String keyword, Boolean isActive, String role, Pageable pageable) {
+        UserRole userRole = role != null ? UserRole.valueOf(role.toUpperCase()) : null;
+        Page<User> userPage = userRepository.searchUsers(keyword, isActive, userRole, pageable);
+        List<UserDTO> users = userPage.getContent().stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+
+        return new PageResponse<>(
+                users,
+                userPage.getNumber(),
+                userPage.getSize(),
+                userPage.getTotalElements(),
+                userPage.getTotalPages(),
+                userPage.isLast()
+        );
     }
 
     private UserDTO convertToDTO(User user) {
@@ -120,9 +167,15 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                 .identityNumber(user.getIdentityNumber())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
-                .active(user.isActive())
-                .isDeleted(user.getIsDeleted())
-                .role(user.getRole())
+                .isActive(user.isActive())
+                .isDeleted(user.isDeleted())
+                .role(user.getRole() != null ? user.getRole().getRoleName() : null)
                 .build();
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        return (UserDetails) userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
     }
 }
