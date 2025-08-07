@@ -36,21 +36,21 @@ public class CategoryController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN')")
     public ResponseEntity<ApiResponse<CategoryDTO>> getCategoryById(@PathVariable Long id) {
         CategoryDTO category = categoryService.getCategoryById(id);
         return ResponseEntity.ok(ApiResponse.success(category));
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN', 'LIBRARIAN')")
     public ResponseEntity<ApiResponse<CategoryDTO>> createCategory(@Valid @RequestBody CreateCategoryRequest request) {
         CategoryDTO createdCategory = categoryService.createCategory(request);
         return ResponseEntity.ok(ApiResponse.created(createdCategory));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN','LIBRARIAN')")
     public ResponseEntity<ApiResponse<CategoryDTO>> updateCategory(
             @PathVariable Long id,
             @Valid @RequestBody UpdateCategoryRequest request) {
@@ -59,14 +59,14 @@ public class CategoryController {
     }
 
     @DeleteMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN','LIBRABRIAN')")
     public ResponseEntity<ApiResponse<Void>> deleteCategory(@RequestParam List<Long> ids) {
         categoryService.deleteCategory(ids);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/{categoryId}/books")
-    @PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN')")
     public ResponseEntity<PageResponse<BookDTO>> getBooksByCategoryId(
             @PathVariable Long categoryId,
             @PageableDefault(sort = "title", direction = Sort.Direction.ASC) Pageable pageable) {

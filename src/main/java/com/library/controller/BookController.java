@@ -7,6 +7,7 @@ import com.library.dto.BookSearchRequest;
 import com.library.dto.CreateBookRequest;
 import com.library.dto.UpdateBookRequest;
 import com.library.service.BookService;
+import com.library.service.BorrowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -24,17 +25,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class BookController {
     private final BookService bookService;
+    private BorrowService borrowService;
 
     @GetMapping
     public ResponseEntity<PageResponse<BookDTO>> searchBooks(
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) Boolean available,
+            @ModelAttribute BookSearchRequest request,
             @PageableDefault(sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
-        BookSearchRequest request = new BookSearchRequest();
-        request.setKeyword(keyword);
-        request.setCategoryId(category != null ? Long.parseLong(category) : null);
-        request.setIsActive(available);
         return ResponseEntity.ok(bookService.searchBooks(request, pageable));
     }
 
@@ -58,9 +54,9 @@ public class BookController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteBook(@PathVariable Long id) {
-        bookService.deleteBook(List.of(id));
+    @PreAuthorize("hasRole('ADMIN','LIBRARIAN')")
+    public ResponseEntity<Void> deleteBorrow(@PathVariable Long id) {
+        borrowService.deleteBorrow(id);
         return ResponseEntity.noContent().build();
     }
 

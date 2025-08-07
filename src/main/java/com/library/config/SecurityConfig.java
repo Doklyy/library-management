@@ -41,6 +41,7 @@ public class SecurityConfig {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationConfiguration authenticationConfiguration;
     private final CustomPermissionEvaluator permissionEvaluator;
+    private final JwtAuthorizationFilter jwtAuthorizationFilter;
 
     @Autowired
     public SecurityConfig(
@@ -49,13 +50,15 @@ public class SecurityConfig {
             ObjectMapper objectMapper,
             PasswordEncoder passwordEncoder,
             AuthenticationConfiguration authenticationConfiguration,
-            CustomPermissionEvaluator permissionEvaluator) {
+            CustomPermissionEvaluator permissionEvaluator,
+            JwtAuthorizationFilter jwtAuthorizationFilter) {
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
         this.objectMapper = objectMapper;
         this.passwordEncoder = passwordEncoder;
         this.authenticationConfiguration = authenticationConfiguration;
         this.permissionEvaluator = permissionEvaluator;
+        this.jwtAuthorizationFilter = jwtAuthorizationFilter;
     }
 
     @Bean
@@ -65,22 +68,23 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/api/users", "/users").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/users/**").hasAnyRole("ADMIN", "LIBRARIAN")
                 .requestMatchers("/api/auth/**", "/auth/**").permitAll()
                 .requestMatchers("/api/books/sync", "/books/sync").permitAll()
                 .requestMatchers("/error").permitAll()
                 .requestMatchers("/api/statistics/**").permitAll()
-                .requestMatchers("/api/borrows/**").permitAll()
+                 .requestMatchers("/api/borrows/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/books/**").permitAll()
                 .requestMatchers("/api/categories/**").permitAll()
                 .requestMatchers("/api/posts/**").permitAll()
                 .requestMatchers("/api/comments/**").permitAll()
-                .requestMatchers("/api/users/**").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(jwtAuthorizationFilter(), UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(jwtAuthorizationFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
     }
 
@@ -107,11 +111,6 @@ public class SecurityConfig {
         );
         filter.setAuthenticationManager(authenticationManager(authenticationConfiguration));
         return filter;
-    }
-
-    @Bean
-    public JwtAuthorizationFilter jwtAuthorizationFilter() {
-        return new JwtAuthorizationFilter(jwtService, userDetailsService, objectMapper);
     }
 
     @Bean

@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -17,11 +18,13 @@ public class StatisticsController {
     private final StatisticsService statisticsService;
 
     @GetMapping("/books-by-category")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<StatisticsDTO.BookByCategory>> getBooksByCategory() {
         return ResponseEntity.ok(statisticsService.getBooksByCategory());
     }
 
     @GetMapping("/top-liked-posts")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<StatisticsDTO.TopLikedPost>> getTopLikedPosts() {
         return ResponseEntity.ok(statisticsService.getTopLikedPosts());
     }

@@ -13,7 +13,7 @@ import lombok.AccessLevel;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class BookSearchRequest {
-    String keyword;
-    Long categoryId;
-    Boolean isActive;
+    private String keyword;
+    private Long categoryId;
+    private Boolean available;
 }

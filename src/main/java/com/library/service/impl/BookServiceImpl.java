@@ -11,13 +11,14 @@ import com.library.exception.ResourceNotFoundException;
 import com.library.repository.BookRepository;
 import com.library.repository.CategoryRepository;
 import com.library.service.BookService;
-import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,14 +26,20 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 @Transactional
 public class BookServiceImpl implements BookService {
 
+    private static final Logger log = LoggerFactory.getLogger(BookServiceImpl.class);
+
     private final BookRepository bookRepository;
     private final CategoryRepository categoryRepository;
     private final ModelMapper modelMapper;
+
+    // Logic constants
+    private static final boolean DEFAULT_ACTIVE = true;
+    private static final boolean DEFAULT_DELETED = false;
+    private static final int DEFAULT_PUBLICATION_YEAR = 2024;
 
     public BookServiceImpl(BookRepository bookRepository, CategoryRepository categoryRepository, ModelMapper modelMapper) {
         this.bookRepository = bookRepository;
@@ -49,14 +56,17 @@ public class BookServiceImpl implements BookService {
         book.setTitle(request.getTitle());
         book.setAuthor(request.getAuthor());
         book.setPublisher(request.getPublisher());
-        book.setPublicationYear(request.getPublicationYear());
+        book.setPublicationYear(request.getPublicationYear() != null ? request.getPublicationYear() : DEFAULT_PUBLICATION_YEAR);
         book.setDescription(request.getDescription());
         book.setLanguage(request.getLanguage());
         book.setPageCount(request.getPageCount());
-        book.setActive(true);
-        book.setDeleted(false);
+        book.setActive(DEFAULT_ACTIVE);
+        book.setDeleted(DEFAULT_DELETED);
         book.setCreatedAt(LocalDateTime.now());
         book.setCreatedBy("SYSTEM");
+        book.setQuantity(request.getQuantity());
+        book.setAvailable(request.getQuantity());
+        book.setBorrowed(0);
 
         // Set categories
         if (request.getCategoryIds() != null && !request.getCategoryIds().isEmpty()) {
@@ -122,7 +132,7 @@ public class BookServiceImpl implements BookService {
         Page<Book> bookPage = bookRepository.searchBooks(
             request.getKeyword(),
             request.getCategoryId(),
-            request.getIsActive(),
+            request.getAvailable(),
             pageable
         );
         

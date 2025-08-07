@@ -59,6 +59,7 @@ public class PostController {
     }
 
     @GetMapping("/top-liked")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> getTopLikedPosts(@RequestParam(defaultValue = "10") int limit) {
         return ResponseEntity.ok(postService.getTopLikedPosts(limit));
     }

@@ -13,4 +13,5 @@ public class BorrowDTO {
     private LocalDateTime dueDate;
     private LocalDateTime returnDate;
     private String status;
+    private String bookborrowed;
 } 

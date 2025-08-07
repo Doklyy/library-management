@@ -36,5 +36,9 @@ public class CreateBookRequest {
     @NotBlank(message = "ISBN is required")
     private String isbn;
 
+    @NotNull(message = "Quantity is required")
+    @Min(value = 1, message = "Quantity must be at least 1")
+    private Integer quantity;
+
     private List<Long> categoryIds;
 }
